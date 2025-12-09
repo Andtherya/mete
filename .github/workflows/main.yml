@@ -1,0 +1,63 @@
+name: Create Meteor App in Root
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      # 检查是否已存在 .meteor 目录（避免重复）
+      - name: Check if already initialized
+        id: check
+        run: |
+          if [ -d ".meteor" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Install Meteor
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          curl https://install.meteor.com/ | sh
+          echo "$HOME/.meteor" >> $GITHUB_PATH
+
+      - name: Create Meteor app in root directory
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          # Step 1: Create temp app in parent dir
+          cd ..
+          meteor create temp-app --minimal
+
+          # Step 2: Move all files from temp-app into current workspace
+          shopt -s dotglob  # Include hidden files like .meteor
+          mv temp-app/* "$GITHUB_WORKSPACE/"
+          mv temp-app/.* "$GITHUB_WORKSPACE/" 2>/dev/null || true  # Ignore "cannot move '.' or '..'"
+
+          # Step 3: Clean up
+          rm -rf temp-app
+
+      - name: Set Git identity
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+
+      - name: Commit and push
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          git add .
+          git commit -m "feat: initialize Meteor app in root directory"
+          git push
